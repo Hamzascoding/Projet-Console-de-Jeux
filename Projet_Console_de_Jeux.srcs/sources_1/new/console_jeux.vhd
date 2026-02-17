@@ -4,96 +4,107 @@ use IEEE.NUMERIC_STD.ALL;
 
 entity console_jeux is
     Port ( 
-        CLK  : in STD_LOGIC;
-        btnC : in STD_LOGIC; -- Reset / Validate
-        sw   : in STD_LOGIC_VECTOR (15 downto 0);
-        seg  : out STD_LOGIC_VECTOR (6 downto 0);
-        an   : out STD_LOGIC_VECTOR (3 downto 0)
+        CLK     : in STD_LOGIC;
+        btnC    : in STD_LOGIC;
+        RESTART : in STD_LOGIC;
+        SW      : in STD_LOGIC_VECTOR (15 downto 0);
+        SEG     : out STD_LOGIC_VECTOR (6 downto 0);
+        AN      : out STD_LOGIC_VECTOR (3 downto 0)
     );
 end console_jeux;
 
 architecture Behavioral of console_jeux is
-    -- Global Signals
-    signal global_rand : std_logic_vector(7 downto 0);
-    signal lfsr_reg : std_logic_vector(7 downto 0) := "10110011"; -- Seed
 
-    -- Signals to hold output from each game
-    signal digits_g1, digits_g2, digits_g3, digits_g4 : std_logic_vector(19 downto 0);
+    signal nb_alea : std_logic_vector(7 downto 0);
+    signal reg_lfsr : std_logic_vector(7 downto 0) := "10110011";
+
+    signal septseg1, septseg2, septseg3, septseg4 : std_logic_vector(19 downto 0);
     signal active_digits : std_logic_vector(19 downto 0);
-    
-    -- Multiplexing
+
     signal mux_counter : unsigned(16 downto 0) := (others => '0');
     signal current_code : std_logic_vector(4 downto 0);
 
+    signal btnC_sync      : std_logic_vector(2 downto 0) := (others => '0');
+    signal btnC_pulsed    : std_logic;
+
+    signal RESTART_sync   : std_logic_vector(2 downto 0) := (others => '0');
+    signal RESTART_pulsed : std_logic;
+
 begin
 
-    ----------------------------------------------------------------------------
-    -- 1. LFSR (Random Number Generator)
-    ----------------------------------------------------------------------------
     process(CLK)
     begin
         if rising_edge(CLK) then
-            -- XOR Feedback taps for 8-bit LFSR
-            lfsr_reg <= lfsr_reg(6 downto 0) & (lfsr_reg(7) xor lfsr_reg(5) xor lfsr_reg(4) xor lfsr_reg(3));
+            reg_lfsr <= reg_lfsr(6 downto 0) & (reg_lfsr(7) xor reg_lfsr(5) xor reg_lfsr(4) xor reg_lfsr(3));
         end if;
     end process;
-    global_rand <= lfsr_reg;
+    nb_alea <= reg_lfsr;
 
-    ----------------------------------------------------------------------------
-    -- 2. GAME INSTANCES
-    ----------------------------------------------------------------------------
-    
-    -- Game 1: Parity (Select with SW 15-14 = "00")
-    -- Uses SW(1) and SW(0) for inputs
+
+    process(CLK)
+    begin
+        if rising_edge(CLK) then
+            btnC_sync    <= btnC_sync(1 downto 0) & btnC;
+            RESTART_sync <= RESTART_sync(1 downto 0) & RESTART;
+        end if;
+    end process;
+
+    btnC_pulsed    <= '1' when (btnC_sync(1) = '1' and btnC_sync(2) = '0') else '0';
+    RESTART_pulsed <= '1' when (RESTART_sync(1) = '1' and RESTART_sync(2) = '0') else '0';
+
+    -- Jeu 1: Parite
     G1: entity work.jeu_parite 
     port map (
-        CLK => CLK, RESET => btnC, 
-        BTN_ODD => sw(1), BTN_EVEN => sw(0), VALIDE => btnC,
-        RAND_INPUT => global_rand, DIGITS_OUT => digits_g1
+        CLK => CLK, 
+        RESET => RESTART_pulsed,
+        btn_impair => SW(1), 
+        btn_pair => SW(0), 
+        VALIDE => btnC_pulsed,
+        RAND_INT => nb_alea, 
+        AFFICHE => septseg1
     );
 
-    -- Game 2: Juste Prix (Select with SW 15-14 = "01")
-    -- Uses SW(3 downto 0) for inputs
+    -- Jeu 2: Juste Prix
     G2: entity work.juste_prix 
     port map (
-        CLK => CLK, RESET => btnC, 
-        PROPOSITION => sw(3 downto 0), 
-        RAND_INPUT => global_rand(3 downto 0), DIGITS_OUT => digits_g2
+        CLK => CLK, 
+        RESET => RESTART_pulsed, 
+        INPUT => SW(3 downto 0), 
+        RAND_INT => nb_alea(3 downto 0), 
+        AFFICHE => septseg2
     );
 
-    -- Game 3: PGCD (Select with SW 15-14 = "10")
-    -- Uses SW(7-4) and SW(3-0)
+    -- Jeu 3: PGCD
     G3: entity work.expert_pgcd 
     port map (
-        CLK => CLK, START => btnC, 
-        A_in => sw(7 downto 4), B_in => sw(3 downto 0), 
-        DIGITS_OUT => digits_g3
+        CLK     => CLK, 
+        START   => RESTART_sync(1),  
+        A    => SW(7 downto 4), 
+        B    => SW(3 downto 0), 
+        AFFICHE => septseg3
     );
-
-    -- Game 4: Memory (Select with SW 15-14 = "11")
+    -- Jeu 4: Memoire
     G4: entity work.jeu_memoire 
     port map (
-        CLK => CLK, RESET => btnC, BTN_VALIDE => btnC,
-        SWITCHES => sw(3 downto 0), RAND_INPUT => global_rand(3 downto 0),
-        DIGITS_OUT => digits_g4
+        CLK => CLK, 
+        RESET => RESTART_pulsed, 
+        BTN_VALIDE => btnC_pulsed,
+        INPUT => SW(3 downto 0), 
+        RAND_INT => nb_alea(3 downto 0),
+        AFFICHE => septseg4
     );
 
-    ----------------------------------------------------------------------------
-    -- 3. MULTIPLEXER (Select which game shows on screen)
-    ----------------------------------------------------------------------------
-    process(sw(15 downto 14), digits_g1, digits_g2, digits_g3, digits_g4)
+
+    process(SW(15 downto 14), septseg1, septseg2, septseg3, septseg4)
     begin
-        case sw(15 downto 14) is
-            when "00" => active_digits <= digits_g1;
-            when "01" => active_digits <= digits_g2;
-            when "10" => active_digits <= digits_g3;
-            when others => active_digits <= digits_g4;
+        case SW(15 downto 14) is
+            when "00" => active_digits <= septseg1;
+            when "01" => active_digits <= septseg2;
+            when "10" => active_digits <= septseg3;
+            when others => active_digits <= septseg4;
         end case;
     end process;
 
-    ----------------------------------------------------------------------------
-    -- 4. DISPLAY CONTROLLER
-    ----------------------------------------------------------------------------
     process(CLK)
     begin
         if rising_edge(CLK) then
@@ -105,21 +116,21 @@ begin
     begin
         case mux_counter(16 downto 15) is
             when "00" => 
-                an <= "1110"; -- Rightmost digit
+                AN <= "1110";
                 current_code <= active_digits(4 downto 0);
             when "01" => 
-                an <= "1101"; 
+                AN <= "1101"; 
                 current_code <= active_digits(9 downto 5);
             when "10" => 
-                an <= "1011"; 
+                AN <= "1011"; 
                 current_code <= active_digits(14 downto 10);
             when others => 
-                an <= "0111"; -- Leftmost digit
+                AN <= "0111";
                 current_code <= active_digits(19 downto 15);
         end case;
     end process;
 
     DEC: entity work.dec_sept_seg
-    port map ( code => current_code, seg => seg );
+    port map ( code => current_code, SEG => SEG );
 
 end Behavioral;

@@ -1,7 +1,21 @@
-*.wdb
+# Vivado Generated Files
 *.jou
 *.log
+*.pb
+*.wdb
+*.wdf
+*.wpc
+*.str
+*.os
+*.xml
+
+# Project directories (generated builds)
 *.runs/
 *.sim/
-*.hw/
 *.ip_user_files/
+*.hw/
+*.cache/
+*.ioplanning/
+
+# Crash logs
+*.zip

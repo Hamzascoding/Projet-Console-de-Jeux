@@ -4,11 +4,11 @@ use IEEE.NUMERIC_STD.ALL;
 
 entity juste_prix is
     Port ( 
-        CLK         : in STD_LOGIC;
-        RESET       : in STD_LOGIC;
-        PROPOSITION : in STD_LOGIC_VECTOR(3 downto 0);
-        RAND_INPUT  : in STD_LOGIC_VECTOR(3 downto 0);
-        DIGITS_OUT  : out STD_LOGIC_VECTOR(19 downto 0)
+        CLK     : in STD_LOGIC;
+        RESET   : in STD_LOGIC;
+        INPUT   : in STD_LOGIC_VECTOR(3 downto 0);
+        RAND_INT: in STD_LOGIC_VECTOR(3 downto 0);
+        AFFICHE : out STD_LOGIC_VECTOR(19 downto 0)
     );
 end juste_prix;
 
@@ -20,23 +20,20 @@ begin
     begin
         if rising_edge(CLK) then
             if RESET = '1' or init_done = '0' then
-                secret <= unsigned(RAND_INPUT);
+                secret <= unsigned(RAND_INT);
                 init_done <= '1';
             end if;
         end if;
     end process;
 
-    process(PROPOSITION, secret)
+    process(INPUT, secret)
     begin
-        if unsigned(PROPOSITION) < secret then 
-            -- Display "_ _ U P"
-            DIGITS_OUT <= "11111" & "11111" & "10010" & "10011"; 
-        elsif unsigned(PROPOSITION) > secret then 
-            -- Display "_ _ d n"
-            DIGITS_OUT <= "11111" & "11111" & "10100" & "10101"; 
+        if unsigned(INPUT) < secret then 
+            AFFICHE <= "11111" & "11111" & "10010" & "10011"; 
+        elsif unsigned(INPUT) > secret then 
+            AFFICHE <= "11111" & "11111" & "10100" & "10101"; 
         else 
-            -- Display "C C C C"
-            DIGITS_OUT <= "10000" & "10000" & "10000" & "10000"; 
+            AFFICHE <= "10000" & "10000" & "10000" & "10000"; 
         end if;
     end process;
 end Behavioral;
